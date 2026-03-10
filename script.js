@@ -229,16 +229,20 @@ async function sendMessage() {
             let imageUrl = selectedImageUrl;
             
             if (!imageUrl) {
-                showTypingIndicator();
                 // Show uploading message
-                const uploadMsg = addMessage('Uploading image...', 'bot');
+                const uploadMsg = addMessage('⬆️ Uploading image...', 'bot');
                 
                 imageUrl = await uploadImageToHost(selectedImage);
                 
                 uploadMsg.remove();
+                addMessage('✅ Image uploaded: ' + imageUrl.substring(0, 50) + '...', 'bot');
             }
             
             const prompt = message || 'Describe this image in detail';
+            
+            // Show what we're sending
+            console.log('Sending to AI - Prompt:', prompt, 'Image URL:', imageUrl);
+            
             const response = await getAIResponse(prompt, imageUrl);
             hideTypingIndicator();
             addMessage(response, 'bot');
@@ -250,8 +254,30 @@ async function sendMessage() {
             previewImg.src = '';
         } catch (error) {
             hideTypingIndicator();
-            console.error('Error:', error);
-            addMessage('Sorry, I had trouble processing your image. The AI service might be busy. Try again or describe what you need help with in text.', 'bot', true);
+            console.error('Error details:', error);
+            
+            // Try again with just text if image failed
+            if (message && message.length > 0) {
+                addMessage('Image upload/analysis failed. Sending your message without the image...', 'bot');
+                
+                showTypingIndicator();
+                try {
+                    const response = await getAIResponse(message, null);
+                    hideTypingIndicator();
+                    addMessage(response, 'bot');
+                } catch (textError) {
+                    hideTypingIndicator();
+                    addMessage('Error: ' + textError.message, 'bot', true);
+                }
+            } else {
+                addMessage('Image service unavailable. Try sending a text message instead.', 'bot', true);
+            }
+            
+            // Clear the image
+            selectedImage = null;
+            selectedImageUrl = null;
+            imagePreview.style.display = 'none';
+            previewImg.src = '';
         }
         
         isLoading = false;
