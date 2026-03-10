@@ -1,5 +1,3 @@
-const API_BASE_URL = '/api/chat';
-
 const chatContainer = document.getElementById('chatContainer');
 const messagesContainer = document.getElementById('messages');
 const messageInput = document.getElementById('messageInput');
@@ -8,11 +6,7 @@ const clearBtn = document.getElementById('clearChat');
 const welcomeScreen = document.getElementById('welcomeScreen');
 const typingIndicator = document.getElementById('typingIndicator');
 const suggestionChips = document.querySelectorAll('.chip');
-const uploadBtn = document.getElementById('uploadBtn');
-const imageInput = document.getElementById('imageInput');
-const imagePreview = document.getElementById('imagePreview');
-const previewImg = document.getElementById('previewImg');
-const removeImageBtn = document.getElementById('removeImage');
+const imageUpload = document.getElementById('imageUpload');
 
 let isLoading = false;
 let selectedImage = null;
@@ -40,48 +34,67 @@ suggestionChips.forEach(chip => {
     });
 });
 
-uploadBtn.addEventListener('click', () => imageInput.click());
+imageUpload.addEventListener('change', handleImageUpload);
 
-imageInput.addEventListener('change', (e) => {
+function handleImageUpload(e) {
     const file = e.target.files[0];
-    if (file) {
-        selectedImage = file;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            previewImg.src = e.target.result;
-            imagePreview.style.display = 'flex';
-        };
-        reader.readAsDataURL(file);
-    }
-});
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        selectedImage = event.target.result;
+        welcomeScreen.style.display = 'none';
+        
+        addMessage('🖼️ Image', 'user', selectedImage);
+        
+        sendImageForAnalysis(selectedImage);
+    };
+    reader.readAsDataURL(file);
+    imageUpload.value = '';
+}
 
-removeImageBtn.addEventListener('click', () => {
-    selectedImage = null;
-    imageInput.value = '';
-    imagePreview.style.display = 'none';
-});
+async function sendImageForAnalysis(imageData) {
+    if (isLoading) return;
+    
+    isLoading = true;
+    showTypingIndicator();
+    
+    try {
+        const response = await getAIResponse('Analyze this image and describe what you see', imageData);
+        hideTypingIndicator();
+        addMessage(response, 'bot');
+    } catch (error) {
+        hideTypingIndicator();
+        addMessage('I can see your image! However, I need a public image URL to analyze it. Please paste an image URL instead, or describe what you want me to help with.', 'bot', true);
+    }
+    
+    isLoading = false;
+    saveChatHistory();
+}
 
 async function sendMessage() {
     const message = messageInput.value.trim();
-    if (!message && !selectedImage) return;
+    if (!message) return;
     if (isLoading) return;
 
     isLoading = true;
     welcomeScreen.style.display = 'none';
     
-    const imageData = selectedImage ? previewImg.src : null;
-    addMessage(message || '🖼️ Image', 'user', false, imageData);
+    const imageUrl = extractImageUrl(message);
+    
+    if (imageUrl) {
+        addMessage(message, 'user', imageUrl);
+    } else {
+        addMessage(message, 'user');
+    }
     
     messageInput.value = '';
-    selectedImage = null;
-    imageInput.value = '';
-    imagePreview.style.display = 'none';
     
     showTypingIndicator();
 
     try {
-        const prompt = message || 'Describe this image';
-        const response = await getAIResponse(prompt, imageData);
+        const prompt = message;
+        const response = await getAIResponse(prompt, imageUrl);
         hideTypingIndicator();
         addMessage(response, 'bot');
     } catch (error) {
@@ -93,11 +106,17 @@ async function sendMessage() {
     saveChatHistory();
 }
 
-async function getAIResponse(message, imageData = null) {
-    let url = `${API_BASE_URL}?prompt=${encodeURIComponent(message)}`;
+function extractImageUrl(text) {
+    const urlRegex = /(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp|svg))/gi;
+    const match = text.match(urlRegex);
+    return match ? match[0] : null;
+}
+
+async function getAIResponse(message, imageUrl = null) {
+    let url = `https://kryptonite-api-library.onrender.com/api/gemini-lite?prompt=${encodeURIComponent(message)}&uid=kate-ai-${Date.now()}&apikey=AIzaSyChJDkYqSzxFHJtAxd65yoDaMP-45BGRtA`;
     
-    if (imageData) {
-        url += `&imageUrl=${encodeURIComponent(imageData)}`;
+    if (imageUrl) {
+        url += `&imgUrl=${encodeURIComponent(imageUrl)}`;
     }
     
     const response = await fetch(url);
@@ -105,12 +124,12 @@ async function getAIResponse(message, imageData = null) {
     if (!response.ok) throw new Error('API error');
     
     const data = await response.json();
-    if (data.error) throw new Error(data.message);
+    if (!data.status) throw new Error(data.error || 'API error');
     
-    return data.result || data;
+    return data.response;
 }
 
-function addMessage(text, sender, isError = false, imageData = null) {
+function addMessage(text, sender, imageUrl = null, isError = false) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${sender}${isError ? ' error' : ''}`;
     
@@ -122,14 +141,18 @@ function addMessage(text, sender, isError = false, imageData = null) {
     bubble.className = 'message-bubble';
     
     if (text && text !== '🖼️ Image') {
-        bubble.innerHTML = formatText(text);
+        const textDiv = document.createElement('div');
+        textDiv.className = 'message-text';
+        textDiv.innerHTML = formatText(text);
+        bubble.appendChild(textDiv);
     }
     
-    if (imageData) {
+    if (imageUrl) {
         const img = document.createElement('img');
-        img.src = imageData;
+        img.src = imageUrl;
         img.className = 'message-image';
-        img.alt = 'Uploaded image';
+        img.alt = 'Image';
+        img.onclick = () => window.open(imageUrl, '_blank');
         bubble.appendChild(img);
     }
     
@@ -146,11 +169,9 @@ function addMessage(text, sender, isError = false, imageData = null) {
 }
 
 function formatText(text) {
-    return text
-        .replace(/&/g, '&')
-        .replace(/</g, '<')
-        .replace(/>/g, '>')
-        .replace(/\n/g, '<br>');
+    let formatted = text.replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>');
+    formatted = formatted.replace(/\n/g, '<br>');
+    return formatted;
 }
 
 function showTypingIndicator() {

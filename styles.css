@@ -524,6 +524,25 @@ body::after {
     outline-offset: 2px;
 }
 
+.upload-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.25s ease;
+    border-radius: var(--radius-sm);
+}
+
+.upload-btn:hover {
+    color: var(--neon-purple);
+    background: rgba(167, 139, 250, 0.1);
+}
+
 .facebook-btn {
     position: fixed;
     bottom: 90px;
