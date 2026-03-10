@@ -9,12 +9,19 @@ export default async function handler(req, res) {
 
     try {
         const prompt = req.query.prompt || (req.body && req.body.prompt);
+        const imageUrl = req.query.imageUrl || (req.body && req.body.imageUrl);
+        const apiKey = 'AIzaSyChJDkYqSzxFHJtAxd65yoDaMP-45BGRtA';
+        const uid = 'kate-ai-' + Date.now();
         
         if (!prompt) {
             return res.status(400).json({ error: 'Prompt is required' });
         }
 
-        const apiUrl = `https://smfahim.xyz/ai/gemini/bard/v1?prompt=${encodeURIComponent(prompt)}`;
+        let apiUrl = `https://kryptonite-api-library.onrender.com/api/gemini-lite?prompt=${encodeURIComponent(prompt)}&uid=${uid}&apikey=${apiKey}`;
+        
+        if (imageUrl) {
+            apiUrl += `&imgUrl=${encodeURIComponent(imageUrl)}`;
+        }
         
         const response = await fetch(apiUrl, {
             method: 'GET',
@@ -27,19 +34,15 @@ export default async function handler(req, res) {
             throw new Error(`External API error: ${response.status}`);
         }
 
-        const contentType = response.headers.get('content-type');
-        let data;
+        const data = await response.json();
         
-        if (contentType && contentType.includes('application/json')) {
-            const json = await response.json();
-            data = json.result || json;
-        } else {
-            data = await response.text();
+        if (!data.status) {
+            throw new Error(data.error || 'API returned error');
         }
 
         return res.status(200).json({ 
             success: true, 
-            result: data 
+            result: data.response 
         });
 
     } catch (error) {

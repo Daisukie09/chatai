@@ -8,8 +8,14 @@ const clearBtn = document.getElementById('clearChat');
 const welcomeScreen = document.getElementById('welcomeScreen');
 const typingIndicator = document.getElementById('typingIndicator');
 const suggestionChips = document.querySelectorAll('.chip');
+const uploadBtn = document.getElementById('uploadBtn');
+const imageInput = document.getElementById('imageInput');
+const imagePreview = document.getElementById('imagePreview');
+const previewImg = document.getElementById('previewImg');
+const removeImageBtn = document.getElementById('removeImage');
 
 let isLoading = false;
+let selectedImage = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     loadChatHistory();
@@ -34,20 +40,48 @@ suggestionChips.forEach(chip => {
     });
 });
 
+uploadBtn.addEventListener('click', () => imageInput.click());
+
+imageInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+        selectedImage = file;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            previewImg.src = e.target.result;
+            imagePreview.style.display = 'flex';
+        };
+        reader.readAsDataURL(file);
+    }
+});
+
+removeImageBtn.addEventListener('click', () => {
+    selectedImage = null;
+    imageInput.value = '';
+    imagePreview.style.display = 'none';
+});
+
 async function sendMessage() {
     const message = messageInput.value.trim();
-    if (!message || isLoading) return;
+    if (!message && !selectedImage) return;
+    if (isLoading) return;
 
     isLoading = true;
     welcomeScreen.style.display = 'none';
     
-    addMessage(message, 'user');
+    const imageData = selectedImage ? previewImg.src : null;
+    addMessage(message || '🖼️ Image', 'user', false, imageData);
+    
     messageInput.value = '';
+    selectedImage = null;
+    imageInput.value = '';
+    imagePreview.style.display = 'none';
     
     showTypingIndicator();
 
     try {
-        const response = await getAIResponse(message);
+        const prompt = message || 'Describe this image';
+        const response = await getAIResponse(prompt, imageData);
         hideTypingIndicator();
         addMessage(response, 'bot');
     } catch (error) {
@@ -59,8 +93,13 @@ async function sendMessage() {
     saveChatHistory();
 }
 
-async function getAIResponse(message) {
-    const url = `${API_BASE_URL}?prompt=${encodeURIComponent(message)}`;
+async function getAIResponse(message, imageData = null) {
+    let url = `${API_BASE_URL}?prompt=${encodeURIComponent(message)}`;
+    
+    if (imageData) {
+        url += `&imageUrl=${encodeURIComponent(imageData)}`;
+    }
+    
     const response = await fetch(url);
     
     if (!response.ok) throw new Error('API error');
@@ -71,7 +110,7 @@ async function getAIResponse(message) {
     return data.result || data;
 }
 
-function addMessage(text, sender, isError = false) {
+function addMessage(text, sender, isError = false, imageData = null) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${sender}${isError ? ' error' : ''}`;
     
@@ -81,7 +120,18 @@ function addMessage(text, sender, isError = false) {
     
     const bubble = document.createElement('div');
     bubble.className = 'message-bubble';
-    bubble.innerHTML = formatText(text);
+    
+    if (text && text !== '🖼️ Image') {
+        bubble.innerHTML = formatText(text);
+    }
+    
+    if (imageData) {
+        const img = document.createElement('img');
+        img.src = imageData;
+        img.className = 'message-image';
+        img.alt = 'Uploaded image';
+        bubble.appendChild(img);
+    }
     
     const time = document.createElement('div');
     time.className = 'message-time';
@@ -123,6 +173,9 @@ function clearChat() {
 function saveChatHistory() {
     const messages = [];
     document.querySelectorAll('.message').forEach(msg => {
+        const hasImage = msg.querySelector('.message-image');
+        if (hasImage) return;
+        
         messages.push({
             sender: msg.classList.contains('user') ? 'user' : 'bot',
             text: msg.querySelector('.message-bubble').textContent,
