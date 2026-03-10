@@ -337,32 +337,173 @@ function extractImageUrl(text) {
     return match ? match[0] : null;
 }
 
-async function getAIResponse(message, imageUrl = null) {
-    let url = `https://kryptonite-api-library.onrender.com/api/gemini-lite?prompt=${encodeURIComponent(message)}&uid=kate-ai-${Date.now()}&apikey=AIzaSyChJDkYqSzxFHJtAxd65yoDaMP-45BGRtA`;
-    
-    if (imageUrl) {
-        // Check if it's a data URL or a public URL
-        if (imageUrl.startsWith('data:')) {
-            // Skip image URL for data URLs as API might not support it
-            console.log('Skipping image URL for data URL');
-        } else {
-            url += `&imgUrl=${encodeURIComponent(imageUrl)}`;
-            console.log('Using image URL:', imageUrl);
-        }
+// Google Gemini API direct - using the format you provided
+const GEMINI_API_KEY = 'AIzaSyChJDkYqSzxFHJtAxd65yoDaMP-45BGRtA';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent';
+
+// Upload image to get public URL
+async function uploadImageToHost(base64Data, attempt = 0) {
+    if (attempt >= IMAGE_HOSTS.length) {
+        throw new Error('All image hosts failed');
     }
     
-    console.log('API URL:', url);
+    const host = IMAGE_HOSTS[attempt];
+    const hostUrl = host.url;
     
-    const response = await fetch(url);
+    try {
+        // Convert base64 to blob
+        const response = await fetch(base64Data);
+        const blob = await response.blob();
+        
+        // Determine file type
+        const fileType = blob.type || 'image/jpeg';
+        const ext = fileType.split('/')[1] || 'jpg';
+        
+        // Create form data
+        const formData = new FormData();
+        formData.append('file', blob, `image.${ext}`);
+        
+        console.log('Trying to upload to:', hostUrl);
+        
+        // Upload
+        const uploadResponse = await fetch(hostUrl, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!uploadResponse.ok) {
+            throw new Error(`Upload failed: ${uploadResponse.status}`);
+        }
+        
+        const data = await uploadResponse.text();
+        console.log('Upload response:', data);
+        
+        // Different hosts return different formats
+        let imageUrl;
+        try {
+            const json = JSON.parse(data);
+            
+            if (hostUrl.includes('file.io')) {
+                if (!json.success) {
+                    throw new Error('Upload failed');
+                }
+                imageUrl = json.link;
+            } else if (hostUrl.includes('0x0.st')) {
+                imageUrl = data.trim();
+                if (!imageUrl.startsWith('http')) {
+                    throw new Error('Invalid response');
+                }
+            } else if (hostUrl.includes('catbox')) {
+                imageUrl = json;
+            } else {
+                imageUrl = data;
+            }
+        } catch (parseErr) {
+            // Plain text response
+            imageUrl = data.trim();
+            if (!imageUrl.startsWith('http')) {
+                throw new Error('Invalid URL returned: ' + imageUrl);
+            }
+        }
+        
+        console.log('Image uploaded successfully:', imageUrl);
+        return imageUrl;
+    } catch (error) {
+        console.error(`Upload to ${hostUrl} failed:`, error);
+        // Try next host
+        return uploadImageToHost(base64Data, attempt + 1);
+    }
+}
+
+// Send to Google Gemini API directly using your format
+async function getAIResponse(message, imageUrl = null) {
+    let contents = [];
     
-    if (!response.ok) throw new Error('API error: ' + response.status);
+    if (imageUrl && imageUrl.startsWith('data:')) {
+        // For image analysis - send base64 directly
+        const base64Data = imageUrl.split(',')[1];
+        contents = [{
+            parts: [
+                { text: message },
+                { 
+                    inlineData: {
+                        mimeType: 'image/jpeg',
+                        data: base64Data
+                    }
+                }
+            ]
+        }];
+    } else if (imageUrl) {
+        // For URL images, still use base64 format
+        try {
+            const response = await fetch(imageUrl);
+            const blob = await response.blob();
+            const reader = new FileReader();
+            const base64Promise = new Promise((resolve, reject) => {
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+            const base64Data = await base64Promise;
+            
+            contents = [{
+                parts: [
+                    { text: message },
+                    { 
+                        inlineData: {
+                            mimeType: blob.type || 'image/jpeg',
+                            data: base64Data
+                        }
+                    }
+                ]
+            }];
+        } catch (err) {
+            // Fallback to text only if image fetch fails
+            contents = [{
+                parts: [
+                    { text: message }
+                ]
+            }];
+        }
+    } else {
+        // Text only
+        contents = [{
+            parts: [
+                { text: message }
+            ]
+        }];
+    }
+    
+    const requestBody = { contents };
+    
+    const url = `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`;
+    console.log('API Request to:', url);
+    
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+    });
+    
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API error: ${response.status} - ${errorText}`);
+    }
     
     const data = await response.json();
     console.log('API Response:', data);
     
-    if (!data.status) throw new Error(data.error || 'API error');
+    if (data.error) {
+        throw new Error(data.error.message || 'API error');
+    }
     
-    return data.response;
+    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+        throw new Error('Invalid API response - no content');
+    }
+    
+    return data.candidates[0].content.parts[0].text;
 }
 
 function addMessage(text, sender, imageUrl = null, isError = false) {
