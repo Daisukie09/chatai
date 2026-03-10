@@ -63,12 +63,15 @@ removeImageBtn.addEventListener('click', () => {
 
 async function sendMessage() {
     const message = messageInput.value.trim();
-    if (!message && !selectedImage || isLoading) return;
+    
+    if (!message && !selectedImage) return;
+    if (isLoading) return;
 
+    isLoading = true;
     welcomeScreen.style.display = 'none';
     
     const imageData = selectedImage ? previewImg.src : null;
-    addMessage(message, 'user', imageData);
+    addMessage(message || '🖼️', 'user', false, imageData);
     
     messageInput.value = '';
     selectedImage = null;
@@ -78,7 +81,8 @@ async function sendMessage() {
     showTypingIndicator();
 
     try {
-        const response = await getAIResponse(message || 'Describe this image');
+        const prompt = message ? message : 'Describe this image';
+        const response = await getAIResponse(prompt);
         hideTypingIndicator();
         addMessage(response, 'bot');
     } catch (error) {
@@ -86,27 +90,7 @@ async function sendMessage() {
         addMessage('Sorry, I encountered an error. Please try again.', 'bot', true);
     }
 
-    saveChatHistory();
-}
-
-async function sendMessage() {
-    const message = messageInput.value.trim();
-    if (!message || isLoading) return;
-
-    welcomeScreen.style.display = 'none';
-    addMessage(message, 'user');
-    messageInput.value = '';
-    showTypingIndicator();
-
-    try {
-        const response = await getAIResponse(message);
-        hideTypingIndicator();
-        addMessage(response, 'bot');
-    } catch (error) {
-        hideTypingIndicator();
-        addMessage('Sorry, I encountered an error. Please try again.', 'bot', true);
-    }
-
+    isLoading = false;
     saveChatHistory();
 }
 
@@ -133,7 +117,7 @@ function addMessage(text, sender, isError = false, imageData = null) {
     const bubble = document.createElement('div');
     bubble.className = 'message-bubble';
     
-    if (text) {
+    if (text && text !== '🖼️') {
         bubble.innerHTML = formatText(text);
     }
     
@@ -166,14 +150,12 @@ function formatText(text) {
 }
 
 function showTypingIndicator() {
-    isLoading = true;
     typingIndicator.style.display = 'flex';
     messagesContainer.appendChild(typingIndicator);
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
 function hideTypingIndicator() {
-    isLoading = false;
     typingIndicator.style.display = 'none';
 }
 
