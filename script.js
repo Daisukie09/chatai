@@ -71,7 +71,20 @@ async function sendMessage() {
     welcomeScreen.style.display = 'none';
     
     const imageData = selectedImage ? previewImg.src : null;
-    addMessage(message || '🖼️', 'user', false, imageData);
+    
+    if (selectedImage && !message) {
+        addMessage('🖼️ Image only', 'user', false, imageData);
+        messageInput.value = '';
+        selectedImage = null;
+        imageInput.value = '';
+        imagePreview.style.display = 'none';
+        hideTypingIndicator();
+        addMessage('Sorry, image analysis is not supported yet. Please add a message with your image.', 'bot');
+        isLoading = false;
+        return;
+    }
+    
+    addMessage(message, 'user', false, imageData);
     
     messageInput.value = '';
     selectedImage = null;
@@ -81,8 +94,7 @@ async function sendMessage() {
     showTypingIndicator();
 
     try {
-        const prompt = message ? message : 'Describe this image';
-        const response = await getAIResponse(prompt);
+        const response = await getAIResponse(message);
         hideTypingIndicator();
         addMessage(response, 'bot');
     } catch (error) {
