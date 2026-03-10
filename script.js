@@ -16,8 +16,67 @@ let isLoading = false;
 let selectedImage = null;
 let selectedImageUrl = null;
 
-// Free image hosting service
-const IMAGE_HOST_API = 'https://tmpfiles.org/api/v1/upload';
+// Free image hosting services - tries multiple hosts for reliability
+const IMAGE_HOSTS = [
+    'https://file.io',
+    'https://0x0.st'
+];
+
+// Upload image to free hosting service
+async function uploadImageToHost(base64Data, attempt = 0) {
+    if (attempt >= IMAGE_HOSTS.length) {
+        throw new Error('All image hosts failed');
+    }
+    
+    const host = IMAGE_HOSTS[attempt];
+    
+    try {
+        // Convert base64 to blob
+        const response = await fetch(base64Data);
+        const blob = await response.blob();
+        
+        // Determine file type
+        const fileType = blob.type || 'image/jpeg';
+        const ext = fileType.split('/')[1] || 'jpg';
+        
+        // Create form data
+        const formData = new FormData();
+        formData.append('file', blob, `image.${ext}`);
+        
+        // Upload
+        const uploadResponse = await fetch(host, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!uploadResponse.ok) {
+            throw new Error(`Upload failed: ${uploadResponse.status}`);
+        }
+        
+        const data = await uploadResponse.json();
+        
+        // Different hosts return different formats
+        let imageUrl;
+        if (host === 'file.io') {
+            if (!data.success) {
+                throw new Error('Upload failed');
+            }
+            imageUrl = data.link;
+        } else if (host === '0x0.st') {
+            imageUrl = data.trim();
+            if (!imageUrl.startsWith('http')) {
+                throw new Error('Invalid response');
+            }
+        }
+        
+        console.log('Image uploaded to', host + ':', imageUrl);
+        return imageUrl;
+    } catch (error) {
+        console.error(`Upload to ${host} failed:`, error);
+        // Try next host
+        return uploadImageToHost(base64Data, attempt + 1);
+    }
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     loadChatHistory();
@@ -80,30 +139,11 @@ function handleImageUpload(e) {
         // Show preview in input area
         previewImg.src = selectedImage;
         imagePreview.style.display = 'flex';
+        messageInput.placeholder = 'Ask about this image or press send to analyze...';
+        messageInput.focus();
         
         welcomeScreen.style.display = 'none';
-        
-        // Show image immediately with loading state
-        const msgDiv = addMessage('📷 Image uploaded, analyzing...', 'user', selectedImage);
-        
-        try {
-            // Upload image to get public URL
-            const imageUrl = await uploadImageToHost(selectedImage);
-            selectedImageUrl = imageUrl;
-            
-            // Remove loading message and add actual image
-            msgDiv.remove();
-            addMessage('📷 Image', 'user', selectedImage);
-            
-            // Send for analysis
-            await sendImageForAnalysis(imageUrl);
-        } catch (error) {
-            console.error('Upload error:', error);
-            msgDiv.remove();
-            addMessage('📷 Image (upload failed - will analyze directly)', 'user', selectedImage);
-            // Try anyway with data URL
-            await sendImageForAnalysis(selectedImage);
-        }
+        addMessage('📷 Image attached - click send to analyze', 'user', selectedImage);
     };
     reader.readAsDataURL(file);
     imageUpload.value = '';
@@ -111,30 +151,39 @@ function handleImageUpload(e) {
 
 // Upload image to free hosting service
 async function uploadImageToHost(base64Data) {
-    // Convert base64 to blob
-    const response = await fetch(base64Data);
-    const blob = await response.blob();
-    
-    // Create form data
-    const formData = new FormData();
-    formData.append('file', blob, 'image.jpg');
-    
-    // Upload to tmpfiles.org
-    const uploadResponse = await fetch(IMAGE_HOST_API, {
-        method: 'POST',
-        body: formData
-    });
-    
-    if (!uploadResponse.ok) {
-        throw new Error('Upload failed');
+    try {
+        // Convert base64 to blob
+        const response = await fetch(base64Data);
+        const blob = await response.blob();
+        
+        // Determine file type
+        const fileType = blob.type || 'image/jpeg';
+        
+        // Create form data for file.io
+        const formData = new FormData();
+        formData.append('file', blob, `image.${fileType.split('/')[1] || 'jpg'}`);
+        
+        // Upload to file.io
+        const uploadResponse = await fetch(IMAGE_HOST_API, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!uploadResponse.ok) {
+            throw new Error(`Upload failed: ${uploadResponse.status}`);
+        }
+        
+        const data = await uploadResponse.json();
+        if (!data.success) {
+            throw new Error('Upload failed: ' + JSON.stringify(data));
+        }
+        
+        console.log('Image uploaded successfully:', data.link);
+        return data.link;
+    } catch (error) {
+        console.error('Upload error:', error);
+        throw error;
     }
-    
-    const data = await uploadResponse.json();
-    if (!data.success) {
-        throw new Error('Upload failed');
-    }
-    
-    return data.data.url;
 }
 
 async function sendImageForAnalysis(imageUrl) {
@@ -149,7 +198,8 @@ async function sendImageForAnalysis(imageUrl) {
         addMessage(response, 'bot');
     } catch (error) {
         hideTypingIndicator();
-        addMessage('Sorry, I encountered an error analyzing the image. Please try again or use a different image.', 'bot', true);
+        console.error('Analysis error:', error);
+        addMessage('Sorry, I had trouble analyzing that image. The image hosting service or AI service might be temporarily unavailable. You can try: 1) Using a smaller image, 2) Trying again later, or 3) Describe what you want me to help with in text.', 'bot', true);
     }
     
     isLoading = false;
@@ -168,16 +218,24 @@ async function sendMessage() {
     
     // Handle message with image
     if (hasImage) {
-        addMessage(message || '📷 What do you see in this image?', 'user', selectedImage);
+        addMessage(message || '📷 Analyze this image', 'user', selectedImage);
         messageInput.value = '';
+        messageInput.placeholder = 'Message Kate AI... (or attach an image)';
         
         showTypingIndicator();
         
         try {
             // Upload image first to get URL
             let imageUrl = selectedImageUrl;
+            
             if (!imageUrl) {
+                showTypingIndicator();
+                // Show uploading message
+                const uploadMsg = addMessage('Uploading image...', 'bot');
+                
                 imageUrl = await uploadImageToHost(selectedImage);
+                
+                uploadMsg.remove();
             }
             
             const prompt = message || 'Describe this image in detail';
@@ -188,9 +246,12 @@ async function sendMessage() {
             // Clear selected image after sending
             selectedImage = null;
             selectedImageUrl = null;
+            imagePreview.style.display = 'none';
+            previewImg.src = '';
         } catch (error) {
             hideTypingIndicator();
-            addMessage('Sorry, I encountered an error processing your image. Please try again.', 'bot', true);
+            console.error('Error:', error);
+            addMessage('Sorry, I had trouble processing your image. The AI service might be busy. Try again or describe what you need help with in text.', 'bot', true);
         }
         
         isLoading = false;
@@ -235,14 +296,25 @@ async function getAIResponse(message, imageUrl = null) {
     let url = `https://kryptonite-api-library.onrender.com/api/gemini-lite?prompt=${encodeURIComponent(message)}&uid=kate-ai-${Date.now()}&apikey=AIzaSyChJDkYqSzxFHJtAxd65yoDaMP-45BGRtA`;
     
     if (imageUrl) {
-        url += `&imgUrl=${encodeURIComponent(imageUrl)}`;
+        // Check if it's a data URL or a public URL
+        if (imageUrl.startsWith('data:')) {
+            // Skip image URL for data URLs as API might not support it
+            console.log('Skipping image URL for data URL');
+        } else {
+            url += `&imgUrl=${encodeURIComponent(imageUrl)}`;
+            console.log('Using image URL:', imageUrl);
+        }
     }
+    
+    console.log('API URL:', url);
     
     const response = await fetch(url);
     
-    if (!response.ok) throw new Error('API error');
+    if (!response.ok) throw new Error('API error: ' + response.status);
     
     const data = await response.json();
+    console.log('API Response:', data);
+    
     if (!data.status) throw new Error(data.error || 'API error');
     
     return data.response;
