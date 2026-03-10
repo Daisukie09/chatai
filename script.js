@@ -1,6 +1,10 @@
 // AI Nexus Chat - JavaScript
 
-const API_BASE_URL = 'https://smfahim.xyz/ai/ai4chat';
+// Determine API URL based on environment
+const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const API_BASE_URL = isLocalhost 
+    ? 'https://smfahim.xyz/ai/ai4chat'  // Direct API for local testing
+    : '/api/chat';  // Vercel serverless function when deployed
 
 // DOM Elements
 const chatContainer = document.getElementById('chatContainer');
@@ -74,30 +78,58 @@ async function handleSendMessage() {
 
 // Send Message to API
 async function sendToAPI(message) {
-    const url = `${API_BASE_URL}?action=chat&prompt=${encodeURIComponent(message)}`;
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     
-    const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-            'Accept': 'application/json, text/plain, */*',
+    if (isLocalhost) {
+        // Direct API call for local development
+        const url = `${API_BASE_URL}?action=chat&prompt=${encodeURIComponent(message)}`;
+        
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                mode: 'cors',
+                headers: {
+                    'Accept': 'application/json, text/plain, */*',
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const contentType = response.headers.get('content-type');
+            let data;
+            
+            if (contentType && contentType.includes('application/json')) {
+                const json = await response.json();
+                data = json.output?.result || json;
+            } else {
+                data = await response.text();
+            }
+            
+            return data;
+        } catch (error) {
+            console.error('Fetch error:', error);
+            throw error;
         }
-    });
-
-    if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const contentType = response.headers.get('content-type');
-    let data;
-    
-    if (contentType && contentType.includes('application/json')) {
-        const json = await response.json();
-        data = json.output?.result || json;
     } else {
-        data = await response.text();
+        // Use Vercel serverless function when deployed
+        const url = `/api/chat?prompt=${encodeURIComponent(message)}`;
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.message || data.error);
+        }
+        
+        return data.result || data;
     }
-    
-    return data;
 }
 
 // Add Message to Chat

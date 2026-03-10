@@ -10,7 +10,7 @@ A modern, neon-gradient AI chat interface similar to ChatGPT, Claude, and Grok. 
 - 📱 **Mobile Friendly** - Fully responsive for all devices
 - ⚡ **Fast & Lightweight** - Pure vanilla JS, no frameworks
 - 💾 **Chat History** - Persists messages in localStorage
-- 🔗 **API Integration** - Connects to AI API endpoint
+- 🔗 **CORS Proxy** - Built-in serverless function for API calls
 - 🚀 **Vercel Ready** - Easy deployment to Vercel
 
 ## 🛠️ Tech Stack
@@ -18,15 +18,18 @@ A modern, neon-gradient AI chat interface similar to ChatGPT, Claude, and Grok. 
 - HTML5
 - CSS3 (Custom Properties, Animations, Flexbox)
 - JavaScript ES6+
+- Vercel Serverless Functions
 - [Google Fonts](https://fonts.google.com) - Outfit & Orbitron
 
 ## 📁 Project Structure
 
 ```
 chatai/
-├── index.html      # Main HTML file
+├── index.html       # Main HTML file
 ├── styles.css      # All styles
 ├── script.js       # Chat functionality
+├── api/
+│   └── chat.js     # Vercel serverless function (CORS proxy)
 ├── SPEC.md         # Detailed specifications
 └── README.md       # This file
 ```
@@ -49,7 +52,7 @@ chatai/
    - Go to [vercel.com](https://vercel.com)
    - Click "Add New..." → "Project"
    - Import your GitHub repository
-   - Vercel will auto-detect it's a static site
+   - Vercel will auto-detect the framework as "Other"
    - Click "Deploy"!
 
 ### Option 2: Deploy via Vercel CLI
@@ -68,11 +71,20 @@ vercel
 2. Drag the project folder onto the page
 3. Done! 🎉
 
+## ⚠️ Important: CORS Issue
+
+The external AI API (`smfahim.xyz`) doesn't allow browser requests directly due to CORS. I've included a Vercel serverless function (`api/chat.js`) that acts as a proxy:
+
+- **When deployed to Vercel**: Uses `/api/chat` (serverless function)
+- **When running locally**: Uses direct API call
+
+This ensures the chat works in production without CORS errors!
+
 ## 🔧 Configuration
 
 ### API Endpoint
 
-The chat uses the AI API at `https://smfahim.xyz/ai/ai4chat`. To modify:
+The chat uses the AI API through a serverless proxy. To modify:
 
 Edit [`script.js`](script.js:1):
 ```javascript
@@ -98,7 +110,7 @@ Edit CSS variables in [`styles.css`](styles.css:1):
 
 ## 🎯 Usage
 
-1. Open `index.html` in a browser
+1. Open `index.html` in a browser (for local testing) or deploy to Vercel
 2. Type a message in the input field
 3. Press Enter or click the send button
 4. Wait for the AI response
