@@ -8,8 +8,14 @@ const clearBtn = document.getElementById('clearChat');
 const welcomeScreen = document.getElementById('welcomeScreen');
 const typingIndicator = document.getElementById('typingIndicator');
 const suggestionChips = document.querySelectorAll('.chip');
+const uploadBtn = document.getElementById('uploadBtn');
+const imageInput = document.getElementById('imageInput');
+const imagePreview = document.getElementById('imagePreview');
+const previewImg = document.getElementById('previewImg');
+const removeImageBtn = document.getElementById('removeImage');
 
 let isLoading = false;
+let selectedImage = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     loadChatHistory();
@@ -33,6 +39,55 @@ suggestionChips.forEach(chip => {
         sendMessage();
     });
 });
+
+uploadBtn.addEventListener('click', () => imageInput.click());
+
+imageInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+        selectedImage = file;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            previewImg.src = e.target.result;
+            imagePreview.style.display = 'flex';
+        };
+        reader.readAsDataURL(file);
+    }
+});
+
+removeImageBtn.addEventListener('click', () => {
+    selectedImage = null;
+    imageInput.value = '';
+    imagePreview.style.display = 'none';
+});
+
+async function sendMessage() {
+    const message = messageInput.value.trim();
+    if (!message && !selectedImage || isLoading) return;
+
+    welcomeScreen.style.display = 'none';
+    
+    const imageData = selectedImage ? previewImg.src : null;
+    addMessage(message, 'user', imageData);
+    
+    messageInput.value = '';
+    selectedImage = null;
+    imageInput.value = '';
+    imagePreview.style.display = 'none';
+    
+    showTypingIndicator();
+
+    try {
+        const response = await getAIResponse(message || 'Describe this image');
+        hideTypingIndicator();
+        addMessage(response, 'bot');
+    } catch (error) {
+        hideTypingIndicator();
+        addMessage('Sorry, I encountered an error. Please try again.', 'bot', true);
+    }
+
+    saveChatHistory();
+}
 
 async function sendMessage() {
     const message = messageInput.value.trim();
@@ -67,7 +122,7 @@ async function getAIResponse(message) {
     return data.result || data;
 }
 
-function addMessage(text, sender, isError = false) {
+function addMessage(text, sender, isError = false, imageData = null) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${sender}${isError ? ' error' : ''}`;
     
@@ -77,7 +132,18 @@ function addMessage(text, sender, isError = false) {
     
     const bubble = document.createElement('div');
     bubble.className = 'message-bubble';
-    bubble.innerHTML = formatText(text);
+    
+    if (text) {
+        bubble.innerHTML = formatText(text);
+    }
+    
+    if (imageData) {
+        const img = document.createElement('img');
+        img.src = imageData;
+        img.className = 'message-image';
+        img.alt = 'Uploaded image';
+        bubble.appendChild(img);
+    }
     
     const time = document.createElement('div');
     time.className = 'message-time';
@@ -121,6 +187,9 @@ function clearChat() {
 function saveChatHistory() {
     const messages = [];
     document.querySelectorAll('.message').forEach(msg => {
+        const hasImage = msg.querySelector('.message-image');
+        if (hasImage) return;
+        
         messages.push({
             sender: msg.classList.contains('user') ? 'user' : 'bot',
             text: msg.querySelector('.message-bubble').textContent,
