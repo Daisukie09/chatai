@@ -16,10 +16,11 @@ let isLoading = false;
 let selectedImage = null;
 let selectedImageUrl = null;
 
-// Free image hosting services - tries multiple hosts for reliability
+// Free image hosting services - multiple options for reliability
 const IMAGE_HOSTS = [
-    'https://file.io',
-    'https://0x0.st'
+    { url: 'https://0x0.st', format: 'form' },  // Simple, fast
+    { url: 'https://file.io', format: 'form' },  // Fallback
+    { url: 'https://litterbox.catbox.moe/resources/internals/api.php', format: 'form' }  // Temporary hosting
 ];
 
 // Upload image to free hosting service
@@ -29,6 +30,7 @@ async function uploadImageToHost(base64Data, attempt = 0) {
     }
     
     const host = IMAGE_HOSTS[attempt];
+    const hostUrl = host.url;
     
     try {
         // Convert base64 to blob
@@ -43,8 +45,10 @@ async function uploadImageToHost(base64Data, attempt = 0) {
         const formData = new FormData();
         formData.append('file', blob, `image.${ext}`);
         
+        console.log('Trying to upload to:', hostUrl);
+        
         // Upload
-        const uploadResponse = await fetch(host, {
+        const uploadResponse = await fetch(hostUrl, {
             method: 'POST',
             body: formData
         });
@@ -53,26 +57,41 @@ async function uploadImageToHost(base64Data, attempt = 0) {
             throw new Error(`Upload failed: ${uploadResponse.status}`);
         }
         
-        const data = await uploadResponse.json();
+        const data = await uploadResponse.text();
+        console.log('Upload response:', data);
         
         // Different hosts return different formats
         let imageUrl;
-        if (host === 'file.io') {
-            if (!data.success) {
-                throw new Error('Upload failed');
+        try {
+            const json = JSON.parse(data);
+            
+            if (hostUrl.includes('file.io')) {
+                if (!json.success) {
+                    throw new Error('Upload failed');
+                }
+                imageUrl = json.link;
+            } else if (hostUrl.includes('0x0.st')) {
+                imageUrl = data.trim();
+                if (!imageUrl.startsWith('http')) {
+                    throw new Error('Invalid response');
+                }
+            } else if (hostUrl.includes('catbox')) {
+                imageUrl = json;
+            } else {
+                imageUrl = data;
             }
-            imageUrl = data.link;
-        } else if (host === '0x0.st') {
+        } catch (parseErr) {
+            // Plain text response
             imageUrl = data.trim();
             if (!imageUrl.startsWith('http')) {
-                throw new Error('Invalid response');
+                throw new Error('Invalid URL returned: ' + imageUrl);
             }
         }
         
-        console.log('Image uploaded to', host + ':', imageUrl);
+        console.log('Image uploaded successfully:', imageUrl);
         return imageUrl;
     } catch (error) {
-        console.error(`Upload to ${host} failed:`, error);
+        console.error(`Upload to ${hostUrl} failed:`, error);
         // Try next host
         return uploadImageToHost(base64Data, attempt + 1);
     }
