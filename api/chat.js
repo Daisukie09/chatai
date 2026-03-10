@@ -14,7 +14,7 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Prompt is required' });
         }
 
-        const apiUrl = `https://smfahim.xyz/ai/ai4chat?action=chat&prompt=${encodeURIComponent(prompt)}`;
+        const apiUrl = `https://smfahim.xyz/ai/gemini/bard/v1?prompt=${encodeURIComponent(prompt)}`;
         
         const response = await fetch(apiUrl, {
             method: 'GET',
@@ -32,7 +32,7 @@ export default async function handler(req, res) {
         
         if (contentType && contentType.includes('application/json')) {
             const json = await response.json();
-            data = json.output?.result || json;
+            data = json.result || json;
         } else {
             data = await response.text();
         }

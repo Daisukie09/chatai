@@ -72,19 +72,7 @@ async function sendMessage() {
     
     const imageData = selectedImage ? previewImg.src : null;
     
-    if (selectedImage && !message) {
-        addMessage('🖼️ Image only', 'user', false, imageData);
-        messageInput.value = '';
-        selectedImage = null;
-        imageInput.value = '';
-        imagePreview.style.display = 'none';
-        hideTypingIndicator();
-        addMessage('Sorry, image analysis is not supported yet. Please add a message with your image.', 'bot');
-        isLoading = false;
-        return;
-    }
-    
-    addMessage(message, 'user', false, imageData);
+    addMessage(message || '🖼️ Image', 'user', false, imageData);
     
     messageInput.value = '';
     selectedImage = null;
