@@ -71,6 +71,10 @@ function addMessage(text, sender, isError = false) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${sender}${isError ? ' error' : ''}`;
     
+    const senderName = document.createElement('div');
+    senderName.className = 'message-sender';
+    senderName.textContent = sender === 'user' ? 'You' : 'Kate AI';
+    
     const bubble = document.createElement('div');
     bubble.className = 'message-bubble';
     bubble.innerHTML = formatText(text);
@@ -79,6 +83,7 @@ function addMessage(text, sender, isError = false) {
     time.className = 'message-time';
     time.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     
+    messageDiv.appendChild(senderName);
     messageDiv.appendChild(bubble);
     messageDiv.appendChild(time);
     messagesContainer.appendChild(messageDiv);
@@ -139,6 +144,10 @@ function loadChatHistory() {
                 const messageDiv = document.createElement('div');
                 messageDiv.className = `message ${msg.sender}`;
                 
+                const senderName = document.createElement('div');
+                senderName.className = 'message-sender';
+                senderName.textContent = msg.sender === 'user' ? 'You' : 'Kate AI';
+                
                 const bubble = document.createElement('div');
                 bubble.className = 'message-bubble';
                 bubble.innerHTML = formatText(msg.text);
@@ -147,6 +156,7 @@ function loadChatHistory() {
                 time.className = 'message-time';
                 time.textContent = msg.time;
                 
+                messageDiv.appendChild(senderName);
                 messageDiv.appendChild(bubble);
                 messageDiv.appendChild(time);
                 messagesContainer.appendChild(messageDiv);

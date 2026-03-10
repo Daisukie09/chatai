@@ -337,6 +337,18 @@ body::after {
     text-align: right;
 }
 
+.message-sender {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    padding: 0 4px;
+}
+
+.message.bot .message-sender {
+    color: var(--neon-orange);
+}
+
 .typing-indicator {
     display: flex;
     align-items: center;
@@ -510,4 +522,36 @@ body::after {
 :focus-visible {
     outline: 2px solid var(--neon-purple);
     outline-offset: 2px;
+}
+
+.facebook-btn {
+    position: fixed;
+    bottom: 90px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    background: linear-gradient(135deg, #1877f2 0%, #0d5dc7 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    box-shadow: 0 4px 15px rgba(24, 119, 242, 0.4);
+    z-index: 99;
+    transition: all 0.3s ease;
+}
+
+.facebook-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 20px rgba(24, 119, 242, 0.6);
+}
+
+.made-with {
+    position: fixed;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    color: var(--text-muted);
+    z-index: 99;
 }
